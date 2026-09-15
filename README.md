@@ -1,864 +1,231 @@
-**\*\*# PowerShell Threat Detection\*\***
+# PowerShell Threat Detection
+## Project Overview
+This project is a Windows-based SOC detection lab designed to identify suspicious PowerShell activity using Windows Security process creation telemetry.
+The project uses Windows Security Event ID **4688 (A new process has been created)** as the primary telemetry source. A custom PowerShell detection script analyzes recent process creation events, identifies PowerShell executions, evaluates suspicious command-line indicators, assigns severity, maps detected behavior to **MITRE ATT&CK** techniques, and generates a structured SOC-style alert.
+The project was developed as a hands-on cybersecurity lab to practice security monitoring, detection engineering, alert triage, and investigation techniques in a local Windows environment.
+
+
+---
+
+
+## Project Objective
+The objective of this project is to build and demonstrate a practical PowerShell threat-detection workflow similar to a basic SOC detection use case.
+The detection focuses on identifying potentially suspicious PowerShell command-line activity, including:
+- Encoded PowerShell commands
+- PowerShell execution-policy bypass
+- **`IEX`** / **`Invoke-Expression`**
+- Remote content retrieval using **`DownloadString`**
+- Base64 decoding using **`FromBase64String`**
+- Hidden PowerShell windows
+
+When suspicious activity is identified, the detector generates a SOC-style alert containing investigation context such as:
+- Alert ID
+- Event timestamp
+- User account
+- Process ID
+- Process name
+- Parent process
+- Severity
+- Suspicious indicator
+- MITRE ATT&CK technique
+- Reason for detection
+- Analyst recommendation
+- ommand line
+- Decoded command, when applicable
+
+
+---
+
+
+## Lab Environment
+## Operating System
+- Windows 11
+- Local virtual machine
+- PowerShell 5.1
+
+## Telemetry Source
+- Windows Security Event Log
+- Event ID 4688 — Process Creation
+
+## Detection Technology
+- PowerShell
+- Windows Event Log
+- PowerShell XML event parsing
+- Regular-expression based detection logic
 
+## Project Location
+```
+C:\SOC-Lab\Projects\PowerShell-Threat-Detection\
+```
 
+## Project Structure
+```
+PowerShell-Threat-Detection
+│
+├── Evidence
+│   └── Detection screenshots
+│
+├── Powershell-Detection-v4.3.ps1
+│
+└── README.md
+```
 
 
+---
 
 
+## Detection Workflow
+The detection workflow follows a simplified SOC investigation process:
+```
+Windows Process Creation
+       │
+       ▼
+Security Event ID 4688
+       │
+       ▼
+Identify PowerShell
+       │
+       ▼
+Extract Command-Line Telemetry
+       │
+       ▼
+Check Suspicious Indicators
+       │
+       ├── EncodedCommand
+       ├── ExecutionPolicy Bypass
+       ├── IEX / Invoke-Expression
+       ├── DownloadString
+       ├── FromBase64String
+       └── Hidden Window
+       │
+       ▼
+Generate SOC Alert
+       │
+       ▼
+Assign Severity
+       │
+       ▼
+Map to MITRE ATT&CK
+       │
+       ▼
+Provide Analyst Recommendation
+```
 
-**\*\*## Project Overview\*\***
+This workflow demonstrates the core detection lifecycle of **telemetry collection → detection → alert generation → contextual analysis → investigation guidance**
 
 
+## Detection Logic
+The detection script analyzes Windows Security Event ID 4688 events generated within the previous 24 hours.
 
+### 1. Event Collection
+The script queries the Windows Security log for Event ID 4688:
 
+```powershell
 
+Get-WinEvent -FilterHashtable @{
 
+LogName = "Security"
 
-**\*\*This project is a Windows-based SOC detection lab designed to identify suspicious PowerShell activity using Windows Security process creation telemetry.\*\***
+Id      = 4688
 
+StartTime = (Get-Date).AddHours(-24)
 
+}
 
+```
 
+Event ID 4688 provides process creation telemetry that can be used to investigate the execution of PowerShell and other processes.
 
+The script then converts each event into XML and extracts relevant fields, including:
 
+**`NewProcessName`**
 
-**\*\*The project uses Windows Security Event ID \\\*\\\*4688 (A new process has been created)\\\*\\\* as the primary telemetry source. A custom PowerShell detection script analyzes recent process creation events, identifies PowerShell executions, evaluates suspicious command-line indicators, assigns severity, maps detected behavior to MITRE ATT\\\&CK techniques, and generates a structured SOC-style alert.\*\***
+**`CommandLine`**
 
+**`SubjectUserName`**
 
+**`NewProcessId`**
 
+**`ParentProcessName`**
 
 
+---
 
 
-**\*\*The project was developed as a hands-on cybersecurity lab to practice security monitoring, detection engineering, alert triage, and investigation techniques in a local Windows environment.\*\***
+### 2. PowerShell Filtering
 
+The detector first filters the collected process creation events so that only **`powershell.exe`** executions are investigated.
 
+This reduces unnecessary processing of unrelated Windows processes.
 
+Events without command-line information are also skipped because the command line is required for the indicator-based detection logic.
 
 
+---
 
 
-**\*\*---\*\***
+### 3. Detection Indicators
 
+The detector evaluates the PowerShell command line against multiple suspicious indicators.
 
 
+| Indicator                   | Severity | MITRE ATT&CK                                       | Detection Purpose                                                         |
+| --------------------------- | -------- | -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `-EncodedCommand`           | High     | T1027 – Obfuscated/Compressed Files or Information | Detects encoded PowerShell commands                                       |
+| `-ExecutionPolicy Bypass`   | Medium   | T1059.001 – PowerShell                             | Detects attempts to bypass PowerShell execution policy                    |
+| `IEX` / `Invoke-Expression` | High     | T1059.001 – PowerShell                             | Detects dynamic execution of commands or scripts                          |
+| `DownloadString`            | High     | T1105 – Ingress Tool Transfer                      | Detects PowerShell functionality commonly used to retrieve remote content |
+| `FromBase64String`          | High     | T1140 – Deobfuscate/Decode Files or Information    | Detects Base64 decoding functionality                                     |
+| `-WindowStyle Hidden`       | Medium   | T1564 – Hide Artifacts                             | Detects PowerShell launched with a hidden window                          |
 
 
+The detection logic uses regular-expression matching to identify these indicators within the PowerShell command line.
 
 
-**\*\*## Project Objective\*\***
+---
 
 
+### 4. Encoded Command Detection and Decoding
 
+When **`-EncodedCommand`** is detected, the script attempts to decode the supplied Base64 value.
 
+The script:
 
+1. Extracts the encoded value.
 
+2. Converts the Base64 string into bytes.
 
-**\*\*The objective of this project is to build and demonstrate a practical PowerShell threat-detection workflow similar to a basic SOC detection use case.\*\***
+3. Decodes the bytes using Unicode encoding.
 
+4. Displays the resulting command when decoding succeeds.
 
+This provides an analyst with additional context during triage rather than simply reporting that an encoded command was detected.
 
+If decoding fails, the alert reports that the command could not be decoded.
 
 
+---
 
 
-**\*\*The detection focuses on identifying potentially suspicious PowerShell command-line activity, including:\*\***
+### 5. Severity Classification
 
+The detector assigns severity based on the indicator identified.
 
+**High severity indicators:**
 
+- Encoded PowerShell commands
 
+- `IEX` / `Invoke-Expression`
 
+- `DownloadString`
 
+- `FromBase64String`
 
-**\*\*\\\* Encoded PowerShell commands\*\***
+**Medium severity indicators:**
 
+- Execution Policy Bypass
 
-
-**\*\*\\\* PowerShell execution-policy bypass\*\***
-
-
-
-**\*\*\\\* `IEX` / `Invoke-Expression`\*\***
-
-
-
-**\*\*\\\* Remote content retrieval using `DownloadString`\*\***
-
-
-
-**\*\*\\\* Base64 decoding using `FromBase64String`\*\***
-
-
-
-**\*\*\\\* Hidden PowerShell windows\*\***
-
-
-
-
-
-
-
-**\*\*When suspicious activity is identified, the detector generates a SOC-style alert containing investigation context such as:\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Alert ID\*\***
-
-
-
-**\*\*\\\* Event timestamp\*\***
-
-
-
-**\*\*\\\* User account\*\***
-
-
-
-**\*\*\\\* Process ID\*\***
-
-
-
-**\*\*\\\* Process name\*\***
-
-
-
-**\*\*\\\* Parent process\*\***
-
-
-
-**\*\*\\\* Severity\*\***
-
-
-
-**\*\*\\\* Suspicious indicator\*\***
-
-
-
-**\*\*\\\* MITRE ATT\\\&CK technique\*\***
-
-
-
-**\*\*\\\* Reason for detection\*\***
-
-
-
-**\*\*\\\* Analyst recommendation\*\***
-
-
-
-**\*\*\\\* Command line\*\***
-
-
-
-**\*\*\\\* Decoded command, when applicable\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*## Lab Environment\*\***
-
-
-
-
-
-
-
-**\*\*### Operating System\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Windows 11\*\***
-
-
-
-**\*\*\\\* Local virtual machine\*\***
-
-
-
-**\*\*\\\* PowerShell 5.1\*\***
-
-
-
-
-
-
-
-**\*\*### Telemetry Source\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Windows Security Event Log\*\***
-
-
-
-**\*\*\\\* Event ID 4688 — Process Creation\*\***
-
-
-
-
-
-
-
-**\*\*### Detection Technology\*\***
-
-
-
-
-
-
-
-**\*\*\\\* PowerShell\*\***
-
-
-
-**\*\*\\\* Windows Event Log\*\***
-
-
-
-**\*\*\\\* PowerShell XML event parsing\*\***
-
-
-
-**\*\*\\\* Regular-expression based detection logic\*\***
-
-
-
-
-
-
-
-**\*\*### Project Location\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*C:\\\\SOC-Lab\\\\Projects\\\\PowerShell-Threat-Detection\\\\\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*### Project Structure\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*PowerShell-Threat-Detection\*\***
-
-
-
-**\*\*│\*\***
-
-
-
-**\*\*├── Evidence\*\***
-
-
-
-**\*\*│   └── Detection screenshots\*\***
-
-
-
-**\*\*│\*\***
-
-
-
-**\*\*├── Powershell-Detection-v4.3.ps1\*\***
-
-
-
-**\*\*│\*\***
-
-
-
-**\*\*└── README.md\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*## Detection Workflow\*\***
-
-
-
-
-
-
-
-**\*\*The detection workflow follows a simplified SOC investigation process:\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*Windows Process Creation\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Security Event ID 4688\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Identify PowerShell\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Extract Command-Line Telemetry\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Check Suspicious Indicators\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*├── EncodedCommand\*\***
-
-
-
-**\&#x20;       \*\*├── ExecutionPolicy Bypass\*\***
-
-
-
-**\&#x20;       \*\*├── IEX / Invoke-Expression\*\***
-
-
-
-**\&#x20;       \*\*├── DownloadString\*\***
-
-
-
-**\&#x20;       \*\*├── FromBase64String\*\***
-
-
-
-**\&#x20;       \*\*└── Hidden Window\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Generate SOC Alert\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Assign Severity\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Map to MITRE ATT\\\&CK\*\***
-
-
-
-**\&#x20;       \*\*│\*\***
-
-
-
-**\&#x20;       \*\*▼\*\***
-
-
-
-**\*\*Provide Analyst Recommendation\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*This workflow demonstrates the core detection lifecycle of \\\*\\\*telemetry collection → detection → alert generation → contextual analysis → investigation guidance\\\*\\\*.\*\***
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-**\*\*## Detection Logic\*\***
-
-
-
-
-
-
-
-**\*\*The detection script analyzes Windows Security Event ID 4688 events generated within the previous 24 hours.\*\***
-
-
-
-
-
-
-
-**\*\*### 1. Event Collection\*\***
-
-
-
-
-
-
-
-**\*\*The script queries the Windows Security log for Event ID 4688:\*\***
-
-
-
-
-
-
-
-**\*\*```powershell\*\***
-
-
-
-**\*\*Get-WinEvent -FilterHashtable @{\*\***
-
-
-
-**\&#x20;   \*\*LogName = "Security"\*\***
-
-
-
-**\&#x20;   \*\*Id      = 4688\*\***
-
-
-
-**\&#x20;   \*\*StartTime = (Get-Date).AddHours(-24)\*\***
-
-
-
-**\*\*}\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*Event ID 4688 provides process creation telemetry that can be used to investigate the execution of PowerShell and other processes.\*\***
-
-
-
-
-
-
-
-**\*\*The script then converts each event into XML and extracts relevant fields, including:\*\***
-
-
-
-
-
-
-
-**\*\*\\\* `NewProcessName`\*\***
-
-
-
-**\*\*\\\* `CommandLine`\*\***
-
-
-
-**\*\*\\\* `SubjectUserName`\*\***
-
-
-
-**\*\*\\\* `NewProcessId`\*\***
-
-
-
-**\*\*\\\* `ParentProcessName`\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 2. PowerShell Filtering\*\***
-
-
-
-
-
-
-
-**\*\*The detector first filters the collected process creation events so that only `powershell.exe` executions are investigated.\*\***
-
-
-
-
-
-
-
-**\*\*This reduces unnecessary processing of unrelated Windows processes.\*\***
-
-
-
-
-
-
-
-**\*\*Events without command-line information are also skipped because the command line is required for the indicator-based detection logic.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 3. Detection Indicators\*\***
-
-
-
-
-
-
-
-**\*\*The detector evaluates the PowerShell command line against multiple suspicious indicators.\*\***
-
-
-
-
-
-
-
-**\*\*| Indicator                   | Severity | MITRE ATT\\\&CK                                       | Detection Purpose                                                         |\*\***
-
-
-
-**\*\*| --------------------------- | -------- | -------------------------------------------------- | ------------------------------------------------------------------------- |\*\***
-
-
-
-**\*\*| `-EncodedCommand`           | High     | T1027 – Obfuscated/Compressed Files or Information | Detects encoded PowerShell commands                                       |\*\***
-
-
-
-**\*\*| `-ExecutionPolicy Bypass`   | Medium   | T1059.001 – PowerShell                             | Detects attempts to bypass PowerShell execution policy                    |\*\***
-
-
-
-**\*\*| `IEX` / `Invoke-Expression` | High     | T1059.001 – PowerShell                             | Detects dynamic execution of commands or scripts                          |\*\***
-
-
-
-**\*\*| `DownloadString`            | High     | T1105 – Ingress Tool Transfer                      | Detects PowerShell functionality commonly used to retrieve remote content |\*\***
-
-
-
-**\*\*| `FromBase64String`          | High     | T1140 – Deobfuscate/Decode Files or Information    | Detects Base64 decoding functionality                                     |\*\***
-
-
-
-**\*\*| `-WindowStyle Hidden`       | Medium   | T1564.003 – Hide Artifacts                             | Detects PowerShell launched with a hidden window                          |\*\***
-
-
-
-
-
-
-
-**\*\*The detection logic uses regular-expression matching to identify these indicators within the PowerShell command line.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 4. Encoded Command Detection and Decoding\*\***
-
-
-
-
-
-
-
-**\*\*When `-EncodedCommand` is detected, the script attempts to decode the supplied Base64 value.\*\***
-
-
-
-
-
-
-
-**\*\*The script:\*\***
-
-
-
-
-
-
-
-**\*\*1. Extracts the encoded value.\*\***
-
-
-
-**\*\*2. Converts the Base64 string into bytes.\*\***
-
-
-
-**\*\*3. Decodes the bytes using Unicode encoding.\*\***
-
-
-
-**\*\*4. Displays the resulting command when decoding succeeds.\*\***
-
-
-
-
-
-
-
-**\*\*This provides an analyst with additional context during triage rather than simply reporting that an encoded command was detected.\*\***
-
-
-
-
-
-
-
-**\*\*If decoding fails, the alert reports that the command could not be decoded.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 5. Severity Classification\*\***
-
-
-
-
-
-
-
-**\*\*The detector assigns severity based on the indicator identified.\*\***
-
-
-
-
-
-
-
-**\*\*\\\*\\\*High severity indicators:\\\*\\\*\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Encoded PowerShell commands\*\***
-
-
-
-**\*\*\\\* `IEX` / `Invoke-Expression`\*\***
-
-
-
-**\*\*\\\* `DownloadString`\*\***
-
-
-
-**\*\*\\\* `FromBase64String`\*\***
-
-
-
-
-
-
-
-**\*\*\\\*\\\*Medium severity indicators:\\\*\\\*\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Execution Policy Bypass\*\***
-
-
-
-**\*\*\\\* Hidden PowerShell Window\*\***
+- Hidden PowerShell Window
 
 
 
@@ -1380,7 +747,7 @@
 
 **| FromBase64String         | T1140     | Deobfuscate/Decode Files or Information       |**
 
-**| Hidden PowerShell Window | T1564.001 | Hide Artifacts                                |**
+**| Hidden PowerShell Window | T1564     | Hide Artifacts                                |**
 
 
 
