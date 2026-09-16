@@ -111,6 +111,34 @@ PowerShell-Threat-Detection
 ---
 
 
+## Requirements
+
+- Windows 11
+- PowerShell 5.1 or later
+- Administrative privileges for accessing the Windows Security event log
+- Security auditing configured for Process Creation
+- Command-line information enabled for process creation events
+
+
+---
+
+
+## How to Run
+
+1. Enable Windows Security auditing for Process Creation.
+2. Ensure Windows Security Event ID 4688 events contain command-line information.
+3. Open PowerShell with appropriate privileges.
+4. Navigate to the project directory.
+5. Run the detection script:
+
+```powershell
+.\Powershell-Detection-v4.3.ps1
+```
+
+
+---
+
+
 ## Detection Workflow
 
 The detection workflow follows a simplified SOC investigation process:
@@ -349,25 +377,25 @@ One of the successful tests involved suspicious **IEX / Invoke-Expression** acti
 
 The detector identified the behavior and generated a SOC alert containing:
 
-**Alert ID**
+- **Alert ID**
 
-**Timestamp**
+- **Timestamp**
 
-**User**
+- **User**
 
-**Process information**
+- **Process information**
 
-**everity**
+- **everity**
 
-**IEX indicator**
+- **IEX indicator**
 
-**MITRE ATT&CK mapping**
+- **MITRE ATT&CK mapping**
 
-**Detection reason**
+- **Detection reason**
 
-**Analyst recommendation**
+- **Analyst recommendation**
 
-**Command line**
+- **Command line**
 
 The resulting alert was captured as screenshot evidence in the project's `Evidence` directory.
 
@@ -655,7 +683,7 @@ This project demonstrates practical experience with:
 
 ## Project Outcome
 
-The project successfully demonstrates a complete basic detection-engineering workflow in a local Windows SOC lab.
+The project demonstrates an end-to-end basic detection-engineering workflow in a local Windows SOC lab.
 
 The detector was tested against controlled suspicious PowerShell activity, including **IEX / Invoke-Expression**, and successfully generated a SOC-style alert with severity, MITRE ATT&CK mapping, investigation context, and analyst recommendations.
 
