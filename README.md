@@ -38,6 +38,7 @@ When suspicious activity is identified, the detector generates a SOC-style alert
 
 
 ## Lab Environment
+
 ## Operating System
 - Windows 11
 - Local virtual machine
@@ -113,39 +114,25 @@ Provide Analyst Recommendation
 
 This workflow demonstrates the core detection lifecycle of **telemetry collection → detection → alert generation → contextual analysis → investigation guidance**
 
-
 ## Detection Logic
 The detection script analyzes Windows Security Event ID 4688 events generated within the previous 24 hours.
 
 ### 1. Event Collection
 The script queries the Windows Security log for Event ID 4688:
-
 ```powershell
-
 Get-WinEvent -FilterHashtable @{
-
 LogName = "Security"
-
 Id      = 4688
-
 StartTime = (Get-Date).AddHours(-24)
-
 }
-
 ```
 
 Event ID 4688 provides process creation telemetry that can be used to investigate the execution of PowerShell and other processes.
-
 The script then converts each event into XML and extracts relevant fields, including:
-
 **`NewProcessName`**
-
 **`CommandLine`**
-
 **`SubjectUserName`**
-
 **`NewProcessId`**
-
 **`ParentProcessName`**
 
 
@@ -153,11 +140,8 @@ The script then converts each event into XML and extracts relevant fields, inclu
 
 
 ### 2. PowerShell Filtering
-
 The detector first filters the collected process creation events so that only **`powershell.exe`** executions are investigated.
-
 This reduces unnecessary processing of unrelated Windows processes.
-
 Events without command-line information are also skipped because the command line is required for the indicator-based detection logic.
 
 
@@ -165,7 +149,6 @@ Events without command-line information are also skipped because the command lin
 
 
 ### 3. Detection Indicators
-
 The detector evaluates the PowerShell command line against multiple suspicious indicators.
 
 
@@ -186,21 +169,13 @@ The detection logic uses regular-expression matching to identify these indicator
 
 
 ### 4. Encoded Command Detection and Decoding
-
 When **`-EncodedCommand`** is detected, the script attempts to decode the supplied Base64 value.
-
 The script:
-
 1. Extracts the encoded value.
-
 2. Converts the Base64 string into bytes.
-
 3. Decodes the bytes using Unicode encoding.
-
 4. Displays the resulting command when decoding succeeds.
-
 This provides an analyst with additional context during triage rather than simply reporting that an encoded command was detected.
-
 If decoding fails, the alert reports that the command could not be decoded.
 
 
@@ -210,390 +185,101 @@ If decoding fails, the alert reports that the command could not be decoded.
 ### 5. Severity Classification
 
 The detector assigns severity based on the indicator identified.
-
 **High severity indicators:**
-
 - Encoded PowerShell commands
-
 - `IEX` / `Invoke-Expression`
-
 - `DownloadString`
-
 - `FromBase64String`
 
 **Medium severity indicators:**
-
 - Execution Policy Bypass
-
 - Hidden PowerShell Window
 
+The severity represents the potential investigative priority of the behavior and does not by itself confirm that the activity is malicious.
 
 
+---
 
 
+### 6. SOC Alert Generation
+When a suspicious indicator is identified, the detector generates a unique SOC-style alert ID.
+Example format:
+```
+SOC-PS-YYYYMMDD-HHMMSS-001
+```
 
+Each alert contains contextual information useful for initial triage:
+```
+Alert ID
+Time
+User
+Process ID
+Process
+Parent Process
+Severity
+Indicator
+MITRE ATT&CK Technique
+Reason
+Analyst Recommendation
+Command Line
+Decoded Command (when applicable)
+```
 
-**\*\*The severity represents the potential investigative priority of the behavior and does not by itself confirm that the activity is malicious.\*\***
+This allows the detection output to function as a basic analyst-oriented alert rather than simply returning a detection message.
 
 
+---
 
 
+### 7. Analyst Recommendations
+Each detection includes an investigation recommendation based on the indicator identified.
+Examples include:
+- Decode and investigate encoded commands.
+- Determine why execution policy was bypassed.
+- Inspect the complete IEX command and identify the source of the executed content.
+- Investigate remote URLs associated with `DownloadString`.
+- Decode embedded Base64 content.
+- Investigate the parent process and command line associated with hidden execution.
 
+This provides an initial investigation direction for a SOC analyst.
 
 
-**\*\*---\*\***
+---
 
 
+### 8. False-Positive Reduction
+The detector contains an exclusion for the known SOC lab detection script itself.
+This prevents the detector from repeatedly identifying its own execution as suspicious PowerShell activity during testing.
+The exclusion is based on the known script path configured in the detection logic:
+```
+C:\SOC-Lab\Scripts\Powershell-Detection\*.ps1
+```
 
+This demonstrates a basic detection-engineering concept: reducing known benign activity to minimize unnecessary alerts and improve signal quality.
 
 
+---
 
 
-**\*\*### 6. SOC Alert Generation\*\***
+## Detection Testing
+The detection logic was tested by generating controlled PowerShell activity inside the isolated Windows SOC lab environment.
+One of the successful tests involved suspicious **IEX / Invoke-Expression** activity.
+The detector identified the behavior and generated a SOC alert containing:
+**Alert ID**
+**Timestamp**
+**User**
+**Process information**
+**everity**
+**IEX indicator**
+**MITRE ATT&CK mapping**
+**Detection reason**
+**Analyst recommendation**
+**Command line**
 
+The resulting alert was captured as screenshot evidence in the project's `Evidence` directory.
 
 
-
-
-
-
-**\*\*When a suspicious indicator is identified, the detector generates a unique SOC-style alert ID.\*\***
-
-
-
-
-
-
-
-**\*\*Example format:\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*SOC-PS-YYYYMMDD-HHMMSS-001\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*Each alert contains contextual information useful for initial triage:\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*Alert ID\*\***
-
-
-
-**\*\*Time\*\***
-
-
-
-**\*\*User\*\***
-
-
-
-**\*\*Process ID\*\***
-
-
-
-**\*\*Process\*\***
-
-
-
-**\*\*Parent Process\*\***
-
-
-
-**\*\*Severity\*\***
-
-
-
-**\*\*Indicator\*\***
-
-
-
-**\*\*MITRE ATT\\\&CK Technique\*\***
-
-
-
-**\*\*Reason\*\***
-
-
-
-**\*\*Analyst Recommendation\*\***
-
-
-
-**\*\*Command Line\*\***
-
-
-
-**\*\*Decoded Command (when applicable)\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*This allows the detection output to function as a basic analyst-oriented alert rather than simply returning a detection message.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 7. Analyst Recommendations\*\***
-
-
-
-
-
-
-
-**\*\*Each detection includes an investigation recommendation based on the indicator identified.\*\***
-
-
-
-
-
-
-
-**\*\*Examples include:\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Decode and investigate encoded commands.\*\***
-
-
-
-**\*\*\\\* Determine why execution policy was bypassed.\*\***
-
-
-
-**\*\*\\\* Inspect the complete IEX command and identify the source of the executed content.\*\***
-
-
-
-**\*\*\\\* Investigate remote URLs associated with `DownloadString`.\*\***
-
-
-
-**\*\*\\\* Decode embedded Base64 content.\*\***
-
-
-
-**\*\*\\\* Investigate the parent process and command line associated with hidden execution.\*\***
-
-
-
-
-
-
-
-**\*\*This provides an initial investigation direction for a SOC analyst.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*### 8. False-Positive Reduction\*\***
-
-
-
-
-
-
-
-**\*\*The detector contains an exclusion for the known SOC lab detection script itself.\*\***
-
-
-
-
-
-
-
-**\*\*This prevents the detector from repeatedly identifying its own execution as suspicious PowerShell activity during testing.\*\***
-
-
-
-
-
-
-
-**\*\*The exclusion is based on the known script path configured in the detection logic:\*\***
-
-
-
-
-
-
-
-**\*\*```text\*\***
-
-
-
-**\*\*C:\\\\SOC-Lab\\\\Scripts\\\\Powershell-Detection\\\*.ps1\*\***
-
-
-
-**\*\*```\*\***
-
-
-
-
-
-
-
-**\*\*This demonstrates a basic detection-engineering concept: \\\*\\\*reducing known benign activity to minimize unnecessary alerts and improve signal quality.\\\*\\\*\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
-
-
-
-
-
-
-
-**\*\*## Detection Testing\*\***
-
-
-
-
-
-
-
-**\*\*The detection logic was tested by generating controlled PowerShell activity inside the isolated Windows SOC lab environment.\*\***
-
-
-
-
-
-
-
-**\*\*One of the successful tests involved suspicious \\\*\\\*IEX / Invoke-Expression\\\*\\\* activity.\*\***
-
-
-
-
-
-
-
-**\*\*The detector identified the behavior and generated a SOC alert containing:\*\***
-
-
-
-
-
-
-
-**\*\*\\\* Alert ID\*\***
-
-
-
-**\*\*\\\* Timestamp\*\***
-
-
-
-**\*\*\\\* User\*\***
-
-
-
-**\*\*\\\* Process information\*\***
-
-
-
-**\*\*\\\* Severity\*\***
-
-
-
-**\*\*\\\* IEX indicator\*\***
-
-
-
-**\*\*\\\* MITRE ATT\\\&CK mapping\*\***
-
-
-
-**\*\*\\\* Detection reason\*\***
-
-
-
-**\*\*\\\* Analyst recommendation\*\***
-
-
-
-**\*\*\\\* Command line\*\***
-
-
-
-
-
-
-
-**\*\*The resulting alert was captured as screenshot evidence in the project's `Evidence` directory.\*\***
-
-
-
-
-
-
-
-**\*\*---\*\***
+---
 
 
 
