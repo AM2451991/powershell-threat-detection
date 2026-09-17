@@ -405,33 +405,23 @@ The resulting alert was captured as screenshot evidence in the project's `Eviden
 
 ## Evidence
 
-The project includes screenshots demonstrating successful detection of suspicious PowerShell activity.
+The project includes screenshots demonstrating successful detection of controlled suspicious PowerShell activity.
 
-### IEX Detection
+### IEX / Invoke-Expression Detection
 
-The IEX test demonstrates that the detector can identify a PowerShell command containing `IEX` / `Invoke-Expression` and generate a corresponding SOC-style alert.
+The detector was tested against controlled `IEX / Invoke-Expression` activity and successfully generated a high-severity SOC alert.
 
-Evidence: See the `Evidence` directory.
+![PowerShell IEX Detection](Evidence/powershell-detection-v4.3-IEX-alert.png)
 
-The screenshot demonstrates the complete detection path:
+The alert includes the detected indicator, severity, MITRE ATT&CK mapping, process context, command line, and analyst recommendation.
 
-```
-Suspicious PowerShell Command
-         ↓
-Windows Event ID 4688
-         ↓
-PowerShell Detection Script
-         ↓
-IEX Indicator Identified
-         ↓
-High Severity Alert
-         ↓
-MITRE ATT&CK Mapping
-         ↓
-Analyst Recommendation
-```
+### Encoded PowerShell Command Detection
 
-The evidence demonstrates that the detection was successfully executed and produced an actionable alert rather than merely showing the detection code.
+The detector was also tested against a controlled encoded PowerShell command and successfully generated an alert for `-EncodedCommand`.
+
+![PowerShell Encoded Command Detection](Evidence/powershell-detection-v4.3-encoded-command-alert.png)
+
+The encoded-command test demonstrates the detector's ability to identify encoded PowerShell execution and provide additional investigation context, including attempted command decoding when applicable.
 
 ## MITRE ATT&CK Mapping
 
